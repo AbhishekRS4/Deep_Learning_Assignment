@@ -1,6 +1,5 @@
 import numpy as np
-from sklearn.model_selection import train_test_split
-
+from dataset import load_gq_data, split_data
 
 def one_hot(Y):
     one_hot_Y= np.zeros((len(Y), max(Y) + 1))
@@ -51,17 +50,28 @@ class Activation(Layer):
         return np.multiply(output_gradient, self.activation_prime(self.input))
 
 
+class Sigmoid(Activation):
+    def __init__(self):
+        def sigmoid(x):
+            self.inputs = x
+            return 1 / (1 + np.exp(-x))
+
+        def sigmoid_prime(x):
+            return sigmoid(x) * (1. - sigmoid(x))
+
+        super().__init__(sigmoid, sigmoid_prime)
+
 class ReLu(Activation):
     def __init__(self):
         def relu(x):
             self.inputs = x
             return np.maximum(0, x)
-    
+
         def relu_prime(x):
             return (x > 0) * 1
 
         super().__init__(relu, relu_prime)
-    
+
 
 class Tanh(Activation):
     def __init__(self):
@@ -79,12 +89,22 @@ class Softmax(Layer):
         self.output = exp_values / np.sum(exp_values)
         #print(self.output)
         return self.output
-    
+
     def backward(self, output_gradient, learning_rate):
         # This version is faster than the one presented in the video
         n = np.size(self.output)
         return np.dot((np.identity(n) - self.output.T) * self.output, output_gradient)
 
+
+class BinaryCrossEntropy:
+    def forward(self, y_true, y_pred):
+        loss = - (y_true * np.log(y_pred) + (1 - y_true) * np.log(1 - y_pred))
+        loss = np.mean(loss)
+        return loss
+
+    def backward(self, y_true, y_pred, prev_output):
+        dl_dw = (y_pred - y_true) * prev_output
+        return dl_dw
 
 class CategoricalCrossEntropy:
     def forward(self, y_pred, y_true):
@@ -117,7 +137,7 @@ class Network:
 
     # set loss to use
     def use(self):
-        self.loss = CategoricalCrossEntropy()
+        self.loss = BinaryCrossEntropy()
 
     # predict output for given input
     def predict(self, input_data):
@@ -143,17 +163,16 @@ class Network:
             for j in range(samples):
                 # forward propagation
                 output = x_train[j]
+                prev_output = output
                 for layer in self.layers:
+                    prev_output = output
                     output = layer.forward(output)
                 # compute loss (for display purpose only)
                 #print(x_train, output)
                 err += self.loss.forward(y_train[j], output)
 
-                #print(err)
-
-
                 # backward propagation
-                error = self.loss.backward(y_train[j], output)
+                error = self.loss.backward(y_train[j], output, prev_output)
                 for layer in reversed(self.layers):
                     #print(error)
                     error = layer.backward(error, learning_rate)
@@ -162,8 +181,6 @@ class Network:
             err /= samples
             print('epoch %d/%d   error=%f' % (i+1, epochs, err))
         return self.layers
-
-
 
 def preprocess_data(x, y):
     # reshape and normalize input data
@@ -175,30 +192,18 @@ def preprocess_data(x, y):
     return x, y
 
 # training set
-X_train = np.load('../dataset/X_train.npy')
-X_train = np.array(X_train, dtype=np.int32)
-y_train = np.load('../dataset/y_train.npy')
+def train(X_train, Y_train):
+    # network
+    net = Network()
+    net.add(Dense(2, 10))
+    net.add(ReLu())
+    net.add(Dense(10, 1))
+    net.add(Sigmoid())
 
-# testing set
-X_test = np.load('../dataset/X_test.npy')
-X_test = np.array(X_test, dtype=np.int32)
-y_test = np.load('../dataset/y_test.npy')
-
-X_train, y_train = preprocess_data(X_train, y_train)
-X_test, y_test = preprocess_data(X_test, y_test)
-
-
-# network
-
-net = Network()
-net.add(Dense(240, 32))
-net.add(ReLu())
-net.add(Dense(32, 10))
-net.add(Softmax())
-
-# train
-net.use()
-network = net.fit(X_train, y_train, epochs=1000, learning_rate=0.001)
+    # train
+    net.use()
+    network = net.fit(X_train, Y_train, epochs=100, learning_rate=0.001)
+    return network
 
 def predict(network, input):
     output = input
@@ -206,12 +211,28 @@ def predict(network, input):
         output = layer.forward(output)
     return output
 
-# test
-err = 0
-samples = len(X_test)
-for x, y in zip(X_test, y_test):
-    output = predict(network, x)
-    if np.argmax(output) == np.argmax(y):
-        err += 1
-err/=samples
-print('Test Error:', err)
+def test():
+    # test
+    err = 0
+    samples = len(X_test)
+    for x, y in zip(X_test, y_test):
+        output = predict(network, x)
+        if np.argmax(output) == np.argmax(y):
+            err += 1
+    err/=samples
+    print('Test Error:', err)
+
+def main():
+    gq_data = load_gq_data()
+    X = gq_data[0]
+    Y = gq_data[1]
+
+    X_train, X_test, Y_train, Y_test = split_data(X, Y, test_size=0.2)
+    #X_train, y_train = preprocess_data(X_train, y_train)
+    #X_test, y_test = preprocess_data(X_test, y_test)
+
+    network = train(X_train, Y_train)
+
+    predict(network, X_test)
+
+main()
