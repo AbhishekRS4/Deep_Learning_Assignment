@@ -1,10 +1,6 @@
 import numpy as np
+from tqdm import tqdm
 from dataset import load_gq_data, split_data
-
-def one_hot(Y):
-    one_hot_Y= np.zeros((len(Y), max(Y) + 1))
-    one_hot_Y[np.arange(len(Y)), Y] = 1
-    return one_hot_Y
 
 class Layer:
     def __init__(self):
@@ -53,7 +49,6 @@ class Activation(Layer):
 class Sigmoid(Activation):
     def __init__(self):
         def sigmoid(x):
-            self.inputs = x
             return 1 / (1 + np.exp(-x))
 
         def sigmoid_prime(x):
@@ -83,17 +78,6 @@ class Tanh(Activation):
 
         super().__init__(tanh, tanh_prime)
 
-class Softmax(Layer):
-    def forward(self, inputs):
-        exp_values = np.exp(inputs - np.max(inputs))
-        self.output = exp_values / np.sum(exp_values)
-        #print(self.output)
-        return self.output
-
-    def backward(self, output_gradient, learning_rate):
-        # This version is faster than the one presented in the video
-        n = np.size(self.output)
-        return np.dot((np.identity(n) - self.output.T) * self.output, output_gradient)
 
 
 class BinaryCrossEntropy:
@@ -102,23 +86,9 @@ class BinaryCrossEntropy:
         loss = np.mean(loss)
         return loss
 
-    def backward(self, y_true, y_pred, prev_output):
-        dl_dw = (y_pred - y_true) * prev_output
-        return dl_dw
+    def backward(self, y_true, y_pred):
+        return ((1 - y_true) / (1 - y_pred) - y_true / y_pred) / np.size(y_true)
 
-class CategoricalCrossEntropy:
-    def forward(self, y_pred, y_true):
-        #samples = len(y_pred)
-        #print(y_pred)
-        y_pred_clipped = np.clip(y_pred, 1e-3, 1-1e-3)
-
-        neg_log_likelihood = -np.log(np.sum(y_pred_clipped*y_true))
-
-        return np.mean(neg_log_likelihood)
-
-    def backward(self, y_pred, y_true):
-        #print(y_pred, y_true)
-        return y_true - y_pred
 
 class MSE:
     def forward(self, y_true, y_pred):
@@ -156,23 +126,20 @@ class Network:
     def fit(self, x_train, y_train, epochs, learning_rate):
         # sample dimension first
         samples = len(x_train)
-
         # training loop
         for i in range(epochs):
             err = 0
-            for j in range(samples):
+            for j in tqdm(range(samples)):
                 # forward propagation
                 output = x_train[j]
-                prev_output = output
                 for layer in self.layers:
-                    prev_output = output
                     output = layer.forward(output)
                 # compute loss (for display purpose only)
                 #print(x_train, output)
                 err += self.loss.forward(y_train[j], output)
 
                 # backward propagation
-                error = self.loss.backward(y_train[j], output, prev_output)
+                error = self.loss.backward(y_train[j], output)
                 for layer in reversed(self.layers):
                     #print(error)
                     error = layer.backward(error, learning_rate)
@@ -182,17 +149,17 @@ class Network:
             print('epoch %d/%d   error=%f' % (i+1, epochs, err))
         return self.layers
 
+
+
 def preprocess_data(x, y):
     # reshape and normalize input data
-    x = x.reshape(x.shape[0], 240, 1)
-    # encode output which is a number in range [0,9] into a vector of size 10
-    # e.g. number 3 will become [0, 0, 0, 1, 0, 0, 0, 0, 0, 0]
-    y = one_hot(y)
-    y = y.reshape(y.shape[0], 10, 1)
+    x = x.reshape(x.shape[0], 2, 1)
+    y = y.reshape(y.shape[0], 1, 1)
     return x, y
 
+
 # training set
-def train(X_train, Y_train):
+def train(X_train, Y_train, epochs, lr_rate):
     # network
     net = Network()
     net.add(Dense(2, 10))
@@ -202,7 +169,7 @@ def train(X_train, Y_train):
 
     # train
     net.use()
-    network = net.fit(X_train, Y_train, epochs=100, learning_rate=0.001)
+    network = net.fit(X_train, Y_train, epochs=epochs, learning_rate=lr_rate)
     return network
 
 def predict(network, input):
@@ -211,16 +178,15 @@ def predict(network, input):
         output = layer.forward(output)
     return output
 
-def test():
+def test(network, X_test, y_test):
     # test
     err = 0
     samples = len(X_test)
     for x, y in zip(X_test, y_test):
-        output = predict(network, x)
-        if np.argmax(output) == np.argmax(y):
-            err += 1
-    err/=samples
-    print('Test Error:', err)
+        output = 1 if predict(network, x) > 0.5 else 0
+        if output != y:
+            err +=1
+    return err / samples
 
 def main():
     gq_data = load_gq_data()
@@ -228,11 +194,14 @@ def main():
     Y = gq_data[1]
 
     X_train, X_test, Y_train, Y_test = split_data(X, Y, test_size=0.2)
-    #X_train, y_train = preprocess_data(X_train, y_train)
-    #X_test, y_test = preprocess_data(X_test, y_test)
+    X_train, Y_train = preprocess_data(X_train, Y_train)
+    X_test, Y_test = preprocess_data(X_test, Y_test)
 
-    network = train(X_train, Y_train)
+    network = train(X_train, Y_train, epochs=100, lr_rate=0.001)
 
-    predict(network, X_test)
+    error = test(network, X_test, Y_test)
 
-main()
+    print('Test Error:', error)
+
+if __name__ == '__main__':
+    main()
