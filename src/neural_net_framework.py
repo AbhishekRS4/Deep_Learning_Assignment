@@ -152,8 +152,8 @@ def start_model_training(FLAGS):
 
 def main():
     learning_rate = 1e-3
-    num_epochs = 1000
-    batch_size = 8
+    num_epochs = 100
+    batch_size = 1
     num_hidden_layers = 2
 
     parser = argparse.ArgumentParser(
