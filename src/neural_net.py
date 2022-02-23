@@ -89,7 +89,7 @@ class BinaryCrossEntropy:
 
     def backward(self, y_true, y_pred, smooth=1e-6):
         #return ((1 - y_true) / (1 - y_pred) - (y_true / y_pred)) / np.size(y_true)
-        return ((y_pred - y_true) / (y_pred * (1 - y_pred) + smooth))
+        return ((y_pred - y_true) / (y_pred * (1 - y_pred) + smooth)) / np.size(y_true)
 
 """
 class MSE:
