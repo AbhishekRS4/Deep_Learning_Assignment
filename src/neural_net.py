@@ -2,6 +2,7 @@ import numpy as np
 from tqdm import tqdm
 from dataset import load_gq_data, split_data
 
+
 class Layer:
     def __init__(self):
         self.input = None
@@ -67,7 +68,7 @@ class ReLu(Activation):
 
         super().__init__(relu, relu_prime)
 
-
+"""
 class Tanh(Activation):
     def __init__(self):
         def tanh(x):
@@ -77,25 +78,27 @@ class Tanh(Activation):
             return 1 - np.tanh(x) ** 2
 
         super().__init__(tanh, tanh_prime)
-
+"""
 
 
 class BinaryCrossEntropy:
-    def forward(self, y_true, y_pred):
-        loss = - (y_true * np.log(y_pred) + (1 - y_true) * np.log(1 - y_pred))
+    def forward(self, y_true, y_pred, smooth=1e-6):
+        loss = - ((y_true * np.log2(y_pred + smooth)) + ((1. - y_true) * np.log2(1. - y_pred + smooth)))
         loss = np.mean(loss)
         return loss
 
-    def backward(self, y_true, y_pred):
-        return ((1 - y_true) / (1 - y_pred) - y_true / y_pred) / np.size(y_true)
+    def backward(self, y_true, y_pred, smooth=1e-6):
+        #return ((1 - y_true) / (1 - y_pred) - (y_true / y_pred)) / np.size(y_true)
+        return ((y_pred - y_true) / (y_pred * (1 - y_pred) + smooth))
 
-
+"""
 class MSE:
     def forward(self, y_true, y_pred):
         return np.mean(np.power(y_true - y_pred, 2))
 
     def backward(self, y_true, y_pred):
         return -2 * (y_true-y_pred) / np.size(y_true)
+"""
 
 class Network:
     def __init__(self):
@@ -112,10 +115,10 @@ class Network:
     # predict output for given input
     def predict(self, input_data):
         # sample dimension first
-        samples = len(input_data)
+        num_train_samples = len(input_data)
 
-        # run network over all samples
-        for i in range(samples):
+        # run network over all num_train_samples
+        for i in range(num_train_samples):
             # forward propagation
             output = input_data[i]
             for layer in self.layers:
@@ -123,32 +126,52 @@ class Network:
         return output
 
     # train the network
-    def fit(self, x_train, y_train, epochs, learning_rate):
+    def fit(self, X_train, Y_train, epochs, learning_rate, X_valid=None, Y_valid=None):
         # sample dimension first
-        samples = len(x_train)
+        num_train_samples = len(X_train)
+
         # training loop
         for i in range(epochs):
-            err = 0
-            for j in tqdm(range(samples)):
+            #-------#
+            # Train #
+            #-------#
+            train_loss = 0
+            for j in tqdm(range(num_train_samples)):
                 # forward propagation
-                output = x_train[j]
+                output = X_train[j]
                 for layer in self.layers:
                     output = layer.forward(output)
                 # compute loss (for display purpose only)
-                #print(x_train, output)
-                err += self.loss.forward(y_train[j], output)
+                #print(X_train, output)
+                train_loss += self.loss.forward(Y_train[j], output)
 
                 # backward propagation
-                error = self.loss.backward(y_train[j], output)
+                train_loss_backward = self.loss.backward(Y_train[j], output)
                 for layer in reversed(self.layers):
                     #print(error)
-                    error = layer.backward(error, learning_rate)
+                    train_loss_backward = layer.backward(train_loss_backward, learning_rate)
                     #print(error.shape)
-            # calculate average error on all samples
-            err /= samples
-            print('epoch %d/%d   error=%f' % (i+1, epochs, err))
-        return self.layers
+            # calculate average error on all num_train_samples
+            train_loss /= num_train_samples
 
+            #------------#
+            # Validation #
+            #------------#
+            if X_valid is not None:
+                valid_loss = 0
+                num_valid_samples = len(X_valid)
+                for k in tqdm(range(num_valid_samples)):
+                    output = X_valid[k]
+                    for layer in self.layers:
+                        output = layer.forward(output)
+                    valid_loss += self.loss.forward(Y_valid[k], output)
+
+                valid_loss /= num_valid_samples
+
+                print(f'epoch: {i+1} / {epochs} train loss: {train_loss:.5f}, valid loss: {valid_loss:.5f}')
+            else:
+                print(f'epoch: {i+1} / {epochs} train loss: {train_loss:.5f}')
+        return self.layers
 
 
 def preprocess_data(x, y):
@@ -157,19 +180,30 @@ def preprocess_data(x, y):
     y = y.reshape(y.shape[0], 1, 1)
     return x, y
 
-
-# training set
-def train(X_train, Y_train, epochs, lr_rate):
+def build_network(num_neurons_input=2, num_hidden_layers=2, num_neurons_hidden=10, num_neurons_output=1):
     # network
     net = Network()
-    net.add(Dense(2, 10))
+
+    # input layer
+    net.add(Dense(num_neurons_input, num_neurons_hidden))
     net.add(ReLu())
-    net.add(Dense(10, 1))
+
+    # hidden layers
+
+    for i in range(num_hidden_layers):
+        net.add(Dense(num_neurons_hidden, num_neurons_hidden))
+        net.add(ReLu())
+
+    net.add(Dense(num_neurons_hidden, num_neurons_output))
     net.add(Sigmoid())
 
-    # train
+    # add loss for training
     net.use()
-    network = net.fit(X_train, Y_train, epochs=epochs, learning_rate=lr_rate)
+    return net
+
+# training set
+def train(network, X_train, Y_train, X_valid, Y_valid, epochs, lr_rate):
+    network = network.fit(X_train, Y_train, epochs=epochs, learning_rate=lr_rate, X_valid=X_valid, Y_valid=Y_valid)
     return network
 
 def predict(network, input):
@@ -180,13 +214,13 @@ def predict(network, input):
 
 def test(network, X_test, y_test):
     # test
-    err = 0
-    samples = len(X_test)
+    acc = 0
+    num_samples = len(X_test)
     for x, y in zip(X_test, y_test):
         output = 1 if predict(network, x) > 0.5 else 0
-        if output != y:
-            err +=1
-    return err / samples
+        if output == y:
+            acc +=1
+    return acc / num_samples
 
 def main():
     gq_data = load_gq_data()
@@ -196,12 +230,14 @@ def main():
     X_train, X_test, Y_train, Y_test = split_data(X, Y, test_size=0.2)
     X_train, Y_train = preprocess_data(X_train, Y_train)
     X_test, Y_test = preprocess_data(X_test, Y_test)
+    X_train, X_valid, Y_train, Y_valid = split_data(X_train, Y_train, test_size=0.1)
 
-    network = train(X_train, Y_train, epochs=100, lr_rate=0.001)
+    network = build_network()
+    network = train(network, X_train, Y_train, X_valid, Y_valid, epochs=100, lr_rate=0.001)
+    valid_acc = test(network, X_valid, Y_valid)
+    test_acc = test(network, X_test, Y_test)
 
-    error = test(network, X_test, Y_test)
-
-    print('Test Error:', error)
+    print(f'Test accuracy: {test_acc:.5f}, Validation accuracy : {valid_acc:.5f}')
 
 if __name__ == '__main__':
     main()
