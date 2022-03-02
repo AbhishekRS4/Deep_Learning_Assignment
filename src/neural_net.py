@@ -240,7 +240,7 @@ def main():
     network = train(network, X_train, Y_train, X_valid, Y_valid, epochs=100, lr_rate=0.003)
     pred_valid_labels = test(network, X_valid, Y_valid)
     valid_acc = compute_accuracy(np.squeeze(Y_valid), pred_valid_labels)
-    print("Validation accuracy : {valid_acc.4f}")
+    print(f"Validation accuracy : {valid_acc:.4f}")
 
     pred_test_labels = test(network, X_test, Y_test)
     test_acc, test_cm, test_f1 = compute_test_metrics(np.squeeze(Y_test), pred_test_labels)
