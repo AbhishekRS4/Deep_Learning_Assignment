@@ -7,8 +7,8 @@ from torch.utils.data import Dataset, DataLoader
 import argparse
 import numpy as np
 
-from metrics import compute_accuracy
 from dataset import load_gq_data, split_data
+from metrics import compute_test_metrics, compute_accuracy
 
 class GQDataset(Dataset):
     def __init__(self, dataset_x, dataset_y, transform=None):
@@ -82,7 +82,7 @@ def validation_loop(model, dataset_loader, bce_loss, device):
     model.eval()
     num_batches = len(dataset_loader)
     valid_loss = 0
-    valid_acc = 0
+    pred_labels = []
 
     with torch.no_grad():
         for batch_x, batch_y in dataset_loader:
@@ -96,13 +96,12 @@ def validation_loop(model, dataset_loader, bce_loss, device):
                 predicted_label.clone().detach().cpu().numpy(),
                 batch_y.unsqueeze(1).clone().detach().cpu().numpy()
             )
+            pred_labels.append(predicted_label)
 
             valid_loss += loss
-            valid_acc += acc
 
     valid_loss /= num_batches
-    valid_acc /= num_batches
-    return valid_loss, valid_acc
+    return valid_loss, np.array(pred_labels)
 
 def test_loop(model, dataset_loader, bce_loss, device):
     return validation_loop(model, dataset_loader, bce_loss, device)
@@ -116,8 +115,8 @@ def start_model_training(FLAGS):
     bce_loss = nn.BCELoss(reduction="mean")
 
     gq_data = load_gq_data()
-    print(gq_data[0].shape)
-    print(gq_data[1].shape)
+    #print(gq_data[0].shape)
+    #print(gq_data[1].shape)
 
     train_x, test_x, train_y, test_y = split_data(gq_data[0], gq_data[1], test_size=0.2)
     train_x, valid_x, train_y, valid_y = split_data(train_x, train_y, test_size=0.1)
@@ -140,18 +139,25 @@ def start_model_training(FLAGS):
     print("Multi layer neural network training is starting")
     for epoch in range(1, FLAGS.num_epochs+1):
         train_loss = train_loop(mlnn_model, sgd_optimizer, train_dataset_loader, bce_loss, device)
-        valid_loss, valid_acc = validation_loop(mlnn_model, valid_dataset_loader, bce_loss, device)
+        valid_loss, valid_pred_labels = validation_loop(mlnn_model, valid_dataset_loader, bce_loss, device)
+        valid_acc = compute_accuracy(valid_y, valid_pred_labels)
         print(f"Epoch: {epoch} / {FLAGS.num_epochs}, train_loss: {train_loss:.5f}, valid_loss: {valid_loss:.5f}, valid_acc: {valid_acc:.5f}")
 
-    test_loss, test_acc = test_loop(mlnn_model, test_dataset_loader, bce_loss, device)
-    print(f"test_loss: {test_loss:.6f}, test_acc: {test_acc:.4f}")
-    print("Model summary")
+    test_loss, test_pred_labels = test_loop(mlnn_model, test_dataset_loader, bce_loss, device)
+    test_acc, test_cm, test_f1 = compute_test_metrics(test_y, test_pred_labels)
+    print("\n---------------")
+    print("Test metrics")
+    print("---------------")
+    print(f"test_loss: {test_loss:.6f}, test_accuracy_score: {test_acc:.4f}, test_f1_score: {test_f1:.4f}")
+    print(f"test confusion matrix")
+    print(test_cm)
+    print("\nModel summary")
     print(summary(mlnn_model, (1, 2)))
     print("Multi layer neural network training completed")
     return
 
 def main():
-    learning_rate = 1e-3
+    learning_rate = 3e-3
     num_epochs = 100
     batch_size = 1
     num_hidden_layers = 2
