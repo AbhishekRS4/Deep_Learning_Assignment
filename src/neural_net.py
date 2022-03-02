@@ -1,7 +1,7 @@
 import numpy as np
 from tqdm import tqdm
 from dataset import load_gq_data, split_data
-
+from metrics import compute_test_metrics, compute_accuracy
 
 class Layer:
     def __init__(self):
@@ -216,11 +216,13 @@ def test(network, X_test, y_test):
     # test
     acc = 0
     num_samples = len(X_test)
+    pred_test_labels = []
+
     for x, y in zip(X_test, y_test):
         output = 1 if predict(network, x) > 0.5 else 0
-        if output == y:
-            acc +=1
-    return acc / num_samples
+        pred_test_labels.append(output)
+
+    return np.array(pred_test_labels)
 
 def main():
     gq_data = load_gq_data()
@@ -228,16 +230,28 @@ def main():
     Y = gq_data[1]
 
     X_train, X_test, Y_train, Y_test = split_data(X, Y, test_size=0.2)
-    X_train, Y_train = preprocess_data(X_train, Y_train)
-    X_test, Y_test = preprocess_data(X_test, Y_test)
     X_train, X_valid, Y_train, Y_valid = split_data(X_train, Y_train, test_size=0.1)
+    X_train, Y_train = preprocess_data(X_train, Y_train)
+    X_valid, Y_valid = preprocess_data(X_valid, Y_valid)
+    X_test, Y_test = preprocess_data(X_test, Y_test)
+
 
     network = build_network()
-    network = train(network, X_train, Y_train, X_valid, Y_valid, epochs=100, lr_rate=0.001)
-    valid_acc = test(network, X_valid, Y_valid)
-    test_acc = test(network, X_test, Y_test)
+    network = train(network, X_train, Y_train, X_valid, Y_valid, epochs=100, lr_rate=0.003)
+    pred_valid_labels = test(network, X_valid, Y_valid)
+    valid_acc = compute_accuracy(np.squeeze(Y_valid), pred_valid_labels)
+    print("Validation accuracy : {valid_acc.4f}")
 
-    print(f'Test accuracy: {test_acc:.5f}, Validation accuracy : {valid_acc:.5f}')
+    pred_test_labels = test(network, X_test, Y_test)
+    test_acc, test_cm, test_f1 = compute_test_metrics(np.squeeze(Y_test), pred_test_labels)
+    print("\n---------------")
+    print("Test metrics")
+    print("---------------")
+    print(f"test_accuracy_score: {test_acc:.4f}, test_f1_score: {test_f1:.4f}")
+    print(f"test confusion matrix")
+    print(test_cm)
+
+    return
 
 if __name__ == '__main__':
     main()
