@@ -27,7 +27,7 @@ class GQDataset(Dataset):
         return x, y
 
 class MultiLayerNeuralNet(nn.Module):
-    def __init__(self, num_hidden_layers=2, num_neurons_hidden=10, num_neurons_input=2, num_neurons_output=1):
+    def __init__(self, num_hidden_layers=3, num_neurons_hidden=10, num_neurons_input=2, num_neurons_output=1):
         super().__init__()
         self.num_hidden_layers = num_hidden_layers
         self.num_neurons_hidden = num_neurons_hidden
@@ -54,7 +54,7 @@ class MultiLayerNeuralNet(nn.Module):
         hidden_layer_output = self.input_layer(x)
 
         # hidden layers
-        for i in range(self.num_hidden_layers):
+        for i in range(self.num_hidden_layers-1):
             hidden_layer_output = self.hidden_layer(hidden_layer_output)
 
         # output layer
@@ -175,7 +175,7 @@ def main():
     learning_rate = 3e-3
     num_epochs = 100
     batch_size = 1
-    num_hidden_layers = 2
+    num_hidden_layers = 3
     save_plot = 0
 
     parser = argparse.ArgumentParser(
