@@ -8,6 +8,7 @@ import argparse
 import numpy as np
 
 from dataset import load_gq_data, split_data
+from visualization_utils import save_plot_losses
 from metrics import compute_test_metrics, compute_accuracy
 
 class GQDataset(Dataset):
@@ -26,7 +27,7 @@ class GQDataset(Dataset):
         return x, y
 
 class MultiLayerNeuralNet(nn.Module):
-    def __init__(self, num_hidden_layers=1, num_neurons_hidden=10, num_neurons_input=2, num_neurons_output=1):
+    def __init__(self, num_hidden_layers=2, num_neurons_hidden=10, num_neurons_input=2, num_neurons_output=1):
         super().__init__()
         self.num_hidden_layers = num_hidden_layers
         self.num_neurons_hidden = num_neurons_hidden
@@ -49,11 +50,14 @@ class MultiLayerNeuralNet(nn.Module):
         )
 
     def forward(self, x):
+        # input + 1 hidden layer
         hidden_layer_output = self.input_layer(x)
 
+        # hidden layers
         for i in range(self.num_hidden_layers):
             hidden_layer_output = self.hidden_layer(hidden_layer_output)
 
+        # output layer
         predicted_probs = self.output_layer(hidden_layer_output)
 
         return predicted_probs
@@ -137,11 +141,22 @@ def start_model_training(FLAGS):
     test_dataset_loader = DataLoader(test_dataset, batch_size=1, shuffle=False)
 
     print("Multi layer neural network training is starting")
+    losses = {"train":None, "valid":None}
+    train_losses = []
+    valid_losses = []
+
     for epoch in range(1, FLAGS.num_epochs+1):
         train_loss = train_loop(mlnn_model, sgd_optimizer, train_dataset_loader, bce_loss, device)
         valid_loss, valid_pred_labels = validation_loop(mlnn_model, valid_dataset_loader, bce_loss, device)
+        train_losses.append(train_loss)
+        valid_losses.append(valid_loss)
         valid_acc = compute_accuracy(valid_y, valid_pred_labels)
         print(f"Epoch: {epoch} / {FLAGS.num_epochs}, train_loss: {train_loss:.5f}, valid_loss: {valid_loss:.5f}, valid_acc: {valid_acc:.5f}")
+
+    losses["train"] = train_losses
+    losses["valid"] = valid_losses
+    if FLAGS.save_plot:
+        save_plot_losses(losses, file_name="losses_pytorch.png")
 
     test_loss, test_pred_labels = test_loop(mlnn_model, test_dataset_loader, bce_loss, device)
     test_acc, test_cm, test_f1 = compute_test_metrics(test_y, test_pred_labels)
@@ -161,6 +176,7 @@ def main():
     num_epochs = 100
     batch_size = 1
     num_hidden_layers = 2
+    save_plot = 0
 
     parser = argparse.ArgumentParser(
         formatter_class=argparse.ArgumentDefaultsHelpFormatter
@@ -173,6 +189,8 @@ def main():
         type=int, help="number of batchs in a batch")
     parser.add_argument("--num_hidden_layers", default=num_hidden_layers,
         type=int, help="number of hidden layers in the model")
+    parser.add_argument("--save_plot", default=save_plot,
+        type=int, choices=[0, 1], help="flag to save plot of losses")
 
     FLAGS, unparsed = parser.parse_known_args()
     start_model_training(FLAGS)
