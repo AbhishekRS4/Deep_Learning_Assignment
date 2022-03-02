@@ -2,10 +2,10 @@ import numpy as np
 import sklearn.datasets
 from sklearn.model_selection import train_test_split
 
-def load_gq_data():
+def load_gq_data(random_state=None):
     N = 500
     gaussian_quantiles = sklearn.datasets.make_gaussian_quantiles(
-        mean=None, cov=0.7, n_samples=N, n_features=2, n_classes=2, shuffle=True, random_state=None)
+        mean=None, cov=0.7, n_samples=N, n_features=2, n_classes=2, shuffle=True, random_state=random_state)
 
     return gaussian_quantiles
 
