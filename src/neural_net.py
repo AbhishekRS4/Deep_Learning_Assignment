@@ -1,7 +1,10 @@
+import argparse
 import numpy as np
 from tqdm import tqdm
 from dataset import load_gq_data, split_data
+from visualization_utils import save_plot_losses
 from metrics import compute_test_metrics, compute_accuracy
+
 
 class Layer:
     def __init__(self):
@@ -129,6 +132,9 @@ class Network:
     def fit(self, X_train, Y_train, epochs, learning_rate, X_valid=None, Y_valid=None):
         # sample dimension first
         num_train_samples = len(X_train)
+        losses = {"train":None, "valid":None}
+        train_losses = []
+        valid_losses = []
 
         # training loop
         for i in range(epochs):
@@ -153,6 +159,7 @@ class Network:
                     #print(error.shape)
             # calculate average error on all num_train_samples
             train_loss /= num_train_samples
+            train_losses.append(train_loss)
 
             #------------#
             # Validation #
@@ -167,11 +174,14 @@ class Network:
                     valid_loss += self.loss.forward(Y_valid[k], output)
 
                 valid_loss /= num_valid_samples
+                valid_losses.append(valid_loss)
 
                 print(f'epoch: {i+1} / {epochs} train loss: {train_loss:.5f}, valid loss: {valid_loss:.5f}')
             else:
                 print(f'epoch: {i+1} / {epochs} train loss: {train_loss:.5f}')
-        return self.layers
+        losses["train"] = train_losses
+        losses["valid"] = valid_losses
+        return self.layers, losses
 
 
 def preprocess_data(x, y):
@@ -184,16 +194,16 @@ def build_network(num_neurons_input=2, num_hidden_layers=2, num_neurons_hidden=1
     # network
     net = Network()
 
-    # input layer
+    # input + 1 hidden layer
     net.add(Dense(num_neurons_input, num_neurons_hidden))
     net.add(ReLu())
 
     # hidden layers
-
-    for i in range(num_hidden_layers):
+    for i in range(num_hidden_layers-1):
         net.add(Dense(num_neurons_hidden, num_neurons_hidden))
         net.add(ReLu())
 
+    # output layer
     net.add(Dense(num_neurons_hidden, num_neurons_output))
     net.add(Sigmoid())
 
@@ -203,8 +213,8 @@ def build_network(num_neurons_input=2, num_hidden_layers=2, num_neurons_hidden=1
 
 # training set
 def train(network, X_train, Y_train, X_valid, Y_valid, epochs, lr_rate):
-    network = network.fit(X_train, Y_train, epochs=epochs, learning_rate=lr_rate, X_valid=X_valid, Y_valid=Y_valid)
-    return network
+    network, losses = network.fit(X_train, Y_train, epochs=epochs, learning_rate=lr_rate, X_valid=X_valid, Y_valid=Y_valid)
+    return network, losses
 
 def predict(network, input):
     output = input
@@ -224,7 +234,8 @@ def test(network, X_test, y_test):
 
     return np.array(pred_test_labels)
 
-def main():
+def start_model_training(FLAGS):
+    save_plot = True
     gq_data = load_gq_data()
     X = gq_data[0]
     Y = gq_data[1]
@@ -236,8 +247,11 @@ def main():
     X_test, Y_test = preprocess_data(X_test, Y_test)
 
 
-    network = build_network()
-    network = train(network, X_train, Y_train, X_valid, Y_valid, epochs=100, lr_rate=0.003)
+    network = build_network(num_hidden_layers=FLAGS.num_hidden_layers)
+    network, losses = train(network, X_train, Y_train, X_valid, Y_valid, epochs=FLAGS.num_epochs, lr_rate=FLAGS.learning_rate)
+    if FLAGS.save_plot:
+        save_plot_losses(losses)
+
     pred_valid_labels = test(network, X_valid, Y_valid)
     valid_acc = compute_accuracy(np.squeeze(Y_valid), pred_valid_labels)
     print(f"Validation accuracy : {valid_acc:.4f}")
@@ -252,6 +266,27 @@ def main():
     print(test_cm)
 
     return
+
+def main():
+    learning_rate = 3e-3
+    num_epochs = 100
+    num_hidden_layers = 3
+    save_plot = 0
+
+    parser = argparse.ArgumentParser(
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter
+    )
+    parser.add_argument("--learning_rate", default=learning_rate,
+        type=float, help="learning rate")
+    parser.add_argument("--num_epochs", default=num_epochs,
+        type=int, help="number of epochs to train")
+    parser.add_argument("--num_hidden_layers", default=num_hidden_layers,
+        type=int, help="number of hidden layers in the model")
+    parser.add_argument("--save_plot", default=save_plot,
+        type=int, choices=[0, 1], help="flag to save plot of losses")
+
+    FLAGS, unparsed = parser.parse_known_args()
+    start_model_training(FLAGS)
 
 if __name__ == '__main__':
     main()
