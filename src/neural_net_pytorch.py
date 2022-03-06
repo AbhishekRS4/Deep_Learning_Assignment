@@ -13,6 +13,15 @@ from metrics import compute_test_metrics, compute_accuracy
 
 class GQDataset(Dataset):
     def __init__(self, dataset_x, dataset_y, transform=None):
+        """
+        ---------
+        Arguments
+        ---------
+        dataset_x : ndarray
+            features of a dataset
+        dataset_y : ndarray
+            labels of a dataset
+        """
         self.transform = None
         self.dataset_x = dataset_x
         self.dataset_y = dataset_y
@@ -28,6 +37,19 @@ class GQDataset(Dataset):
 
 class MultiLayerNeuralNet(nn.Module):
     def __init__(self, num_hidden_layers=3, num_neurons_hidden=10, num_neurons_input=2, num_neurons_output=1):
+        """
+        ---------
+        Arguments
+        ---------
+        num_hidden_layers : int
+            number of hidden layers in the neural network
+        num_neurons_hidden : int
+            number of neurons in each of the hidden layers
+        num_neurons_input : int
+            number of neurons in the input layer
+        num_neurons_output : int
+            number of neurons in the output layer
+        """
         super().__init__()
         self.num_hidden_layers = num_hidden_layers
         self.num_neurons_hidden = num_neurons_hidden
@@ -63,6 +85,27 @@ class MultiLayerNeuralNet(nn.Module):
         return predicted_probs
 
 def train_loop(model, optimizer, dataset_loader, bce_loss, device):
+    """
+    ---------
+    Arguments
+    ---------
+    model :
+        object of a neural network class
+    optimizer :
+        object of an optimizer to be used for updating the weights
+    dataset_loader :
+        object of dataset loader class
+    bce_loss :
+        object of BCE loss function
+    device :
+        device to be used to train the network
+
+    -------
+    Returns
+    -------
+    train_loss : float
+        training loss for the epoch
+    """
     model.train()
     num_batches = len(dataset_loader)
     train_loss = 0
@@ -83,6 +126,27 @@ def train_loop(model, optimizer, dataset_loader, bce_loss, device):
     return train_loss
 
 def validation_loop(model, dataset_loader, bce_loss, device):
+    """
+    ---------
+    Arguments
+    ---------
+    model :
+        object of a neural network class
+    dataset_loader :
+        object of dataset loader class
+    bce_loss :
+        object of BCE loss function
+    device :
+        device to be used to train the network
+
+    -------
+    Returns
+    -------
+    valid_loss : float
+        validation loss for the epoch
+    pred_labels : ndarray
+        predicted labels for the samples in the dataset for the epoch
+    """
     model.eval()
     num_batches = len(dataset_loader)
     valid_loss = 0
@@ -111,30 +175,37 @@ def test_loop(model, dataset_loader, bce_loss, device):
     return validation_loop(model, dataset_loader, bce_loss, device)
 
 def start_model_training(FLAGS):
+    # create neural network object and set device to cpu
     device = torch.device("cpu")
-
     mlnn_model = MultiLayerNeuralNet(num_hidden_layers=FLAGS.num_hidden_layers)
     mlnn_model.to(device)
+
+    # create objects for SGD optimizer and BCE loss
     sgd_optimizer = torch.optim.SGD(mlnn_model.parameters(), FLAGS.learning_rate)
     bce_loss = nn.BCELoss(reduction="mean")
 
+    # get Gaussian quantile dataset
     gq_data = load_gq_data()
-    #print(gq_data[0].shape)
-    #print(gq_data[1].shape)
 
+    # split the dataset into train (80%) and test (20%)
     train_x, test_x, train_y, test_y = split_data(gq_data[0], gq_data[1], test_size=0.2)
+
+    # further split dataset into test (72%) and validation (8%)
     train_x, valid_x, train_y, valid_y = split_data(train_x, train_y, test_size=0.1)
 
+    # create train dataset loader object
     train_dataset = GQDataset(train_x, train_y,
         transforms.Compose([transforms.ToTensor()])
     )
     train_dataset_loader = DataLoader(train_dataset, batch_size=FLAGS.batch_size, shuffle=True)
 
+    # create validation dataset loader object
     valid_dataset = GQDataset(valid_x, valid_y,
         transforms.Compose([transforms.ToTensor()])
     )
     valid_dataset_loader = DataLoader(valid_dataset, batch_size=FLAGS.batch_size, shuffle=False)
 
+    # create test dataset loader object
     test_dataset = GQDataset(test_x, test_y,
         transforms.Compose([transforms.ToTensor()])
     )
@@ -145,8 +216,11 @@ def start_model_training(FLAGS):
     train_losses = []
     valid_losses = []
 
+    # start training loop
     for epoch in range(1, FLAGS.num_epochs+1):
+        # train
         train_loss = train_loop(mlnn_model, sgd_optimizer, train_dataset_loader, bce_loss, device)
+        #validate
         valid_loss, valid_pred_labels = validation_loop(mlnn_model, valid_dataset_loader, bce_loss, device)
         train_losses.append(train_loss)
         valid_losses.append(valid_loss)
@@ -155,10 +229,14 @@ def start_model_training(FLAGS):
 
     losses["train"] = train_losses
     losses["valid"] = valid_losses
+
+    # if needed save the plot of train and validation losses
     if FLAGS.save_plot:
         save_plot_losses(losses, file_name="losses_pytorch.png")
 
+    # test
     test_loss, test_pred_labels = test_loop(mlnn_model, test_dataset_loader, bce_loss, device)
+    # compute metrics for the test set
     test_acc, test_cm, test_f1 = compute_test_metrics(test_y, test_pred_labels)
     print("\n---------------")
     print("Test metrics")
@@ -172,6 +250,7 @@ def start_model_training(FLAGS):
     return
 
 def main():
+    # set default values for commandline arguments
     learning_rate = 3e-3
     num_epochs = 100
     batch_size = 1
