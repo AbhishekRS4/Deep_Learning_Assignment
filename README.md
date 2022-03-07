@@ -4,11 +4,21 @@
 * This is a repo of assignment 1 for Master's [Deep Learning](https://www.rug.nl/ocasys/fwn/vak/show?code=WMAI017-05) Course at University of Groningen
 
 ### Instructions to run the code
-* The neural network implemented from scratch using Numpy. The default parameters already give the best possible results. To list all the commandline options available run the following command.
+* The neural network implemented from scratch using Numpy. The default parameters already give the best possible results.
+* To run with default parameters
+```
+python src/neural_net_scratch.py
+```
+* To list all the commandline options available run the following command.
 ```
 python src/neural_net_scratch.py --help
 ```
-* The neural network implemented using PyTorch. The default parameters already give the best possible results. To list all the commandline options available run the following command.
+* The neural network implemented using PyTorch. The default parameters already give the best possible results.
+* To run with default parameters
+```
+python src/neural_net_pytorch.py
+```
+* To list all the commandline options available run the following command.
 ```
 python src/neural_net_pytorch.py --help
 ```
