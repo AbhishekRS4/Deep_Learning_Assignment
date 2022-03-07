@@ -22,6 +22,7 @@ python src/neural_net_pytorch.py
 ```
 python src/neural_net_pytorch.py --help
 ```
+#### 3. Visualize the dataset
 * The [jupyter notebook](src/visualize_dataset.ipynb) can be used to visualize the distribution of the dataset
 
 ## Dependencies
