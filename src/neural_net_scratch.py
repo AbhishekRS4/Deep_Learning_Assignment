@@ -276,6 +276,7 @@ def start_model_training(FLAGS):
     return
 
 def main():
+    # set default values for commandline arguments
     learning_rate = 3e-3
     num_epochs = 100
     num_hidden_layers = 3
