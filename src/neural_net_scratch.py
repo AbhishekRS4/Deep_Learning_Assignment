@@ -91,7 +91,6 @@ class BinaryCrossEntropy:
         return loss
 
     def backward(self, y_true, y_pred, smooth=1e-6):
-        #return ((1 - y_true) / (1 - y_pred) - (y_true / y_pred)) / np.size(y_true)
         return ((y_pred - y_true) / (y_pred * (1 - y_pred) + smooth)) / np.size(y_true)
 
 """
@@ -211,17 +210,19 @@ def build_network(num_neurons_input=2, num_hidden_layers=2, num_neurons_hidden=1
     net.use()
     return net
 
-# training set
+# train
 def train(network, X_train, Y_train, X_valid, Y_valid, epochs, lr_rate):
     network, losses = network.fit(X_train, Y_train, epochs=epochs, learning_rate=lr_rate, X_valid=X_valid, Y_valid=Y_valid)
     return network, losses
 
+# predict
 def predict(network, input):
     output = input
     for layer in network:
         output = layer.forward(output)
     return output
 
+# test
 def test(network, X_test, y_test):
     # test
     acc = 0
@@ -234,24 +235,31 @@ def test(network, X_test, y_test):
 
     return np.array(pred_test_labels)
 
+# start training the model
 def start_model_training(FLAGS):
-    save_plot = True
+    # load Gaussian quantile dataset
     gq_data = load_gq_data()
     X = gq_data[0]
     Y = gq_data[1]
 
+    # split the dataset into train (80%) and test (20%)
     X_train, X_test, Y_train, Y_test = split_data(X, Y, test_size=0.2)
+
+    # further split test dataset into test (72%) and validation (8%)
     X_train, X_valid, Y_train, Y_valid = split_data(X_train, Y_train, test_size=0.1)
     X_train, Y_train = preprocess_data(X_train, Y_train)
     X_valid, Y_valid = preprocess_data(X_valid, Y_valid)
     X_test, Y_test = preprocess_data(X_test, Y_test)
 
-
+    # build the neural network model
     network = build_network(num_hidden_layers=FLAGS.num_hidden_layers)
     network, losses = train(network, X_train, Y_train, X_valid, Y_valid, epochs=FLAGS.num_epochs, lr_rate=FLAGS.learning_rate)
+
+    # if needed save the plot of train and validation losses
     if FLAGS.save_plot:
         save_plot_losses(losses)
 
+    # test and compute metrics for the test set
     pred_valid_labels = test(network, X_valid, Y_valid)
     valid_acc = compute_accuracy(np.squeeze(Y_valid), pred_valid_labels)
     print(f"Validation accuracy : {valid_acc:.4f}")

@@ -190,7 +190,7 @@ def start_model_training(FLAGS):
     # split the dataset into train (80%) and test (20%)
     train_x, test_x, train_y, test_y = split_data(gq_data[0], gq_data[1], test_size=0.2)
 
-    # further split dataset into test (72%) and validation (8%)
+    # further split test dataset into test (72%) and validation (8%)
     train_x, valid_x, train_y, valid_y = split_data(train_x, train_y, test_size=0.1)
 
     # create train dataset loader object
